@@ -1,5 +1,6 @@
 venv
 pic
 logs
+__pycache__
 downloaded_files
 test_images.py
