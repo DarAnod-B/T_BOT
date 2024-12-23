@@ -10,9 +10,9 @@ import logging
 import re
 
 URL_REGEX = re.compile(
-    r'^(https?:\/\/)?'  # Протокол (http или https)
-    r'([\da-z\.-]+)\.([a-z\.]{2,6})'  # Домен
-    r'([\/\w\.-]*)*\/?$'  # Путь
+    r"^(https?:\/\/)?"  # Протокол (http или https)
+    r"([\da-z\.-]+)\.([a-z\.]{2,6})"  # Домен
+    r"([\/\w\.-]*)*\/?$"  # Путь
 )
 # Папка, где хранятся презентации
 PRESENTATION_DIR = os.path.join(
@@ -20,17 +20,22 @@ PRESENTATION_DIR = os.path.join(
 )
 
 # Настраиваем логирование
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # Создаем роутер
 router = Router()
+
 
 # Состояния для FSM
 class LinkStates(StatesGroup):
     waiting_for_links = State()
 
+
 # Память для хранения состояний (можно заменить на Redis или другой storage)
 storage = MemoryStorage()
+
 
 @router.message(Command("start"))
 async def start_command(message: Message):
@@ -41,6 +46,7 @@ async def start_command(message: Message):
         "/logs - Получить файл логов последнего запроса."
     )
 
+
 @router.message(Command("links_to_presentations"))
 async def links_to_presentations_command(message: Message, state: FSMContext):
     """Обработчик команды /links_to_presentations."""
@@ -49,6 +55,7 @@ async def links_to_presentations_command(message: Message, state: FSMContext):
     )
     # Устанавливаем состояние "ожидание ссылок"
     await state.set_state(LinkStates.waiting_for_links)
+
 
 @router.message(LinkStates.waiting_for_links)
 async def handle_links(message: Message, state: FSMContext):
@@ -77,7 +84,7 @@ async def handle_links(message: Message, state: FSMContext):
 
     try:
         # Обрабатываем ссылки
-        parser_logs, rewriter_logs, presentation_logs, sheet_tools_logs = process_links_with_orchestrator(links, log_file)
+        await process_links_with_orchestrator(links, log_file, message)
 
         await message.answer("Обработка завершена. Отправляю презентации...")
 
@@ -96,11 +103,12 @@ async def handle_links(message: Message, state: FSMContext):
         await message.answer("Презентации отправлены!")
 
     except Exception as e:
-        logging.error(f"Ошибка при обработке ссылок: {e}")
+        logging.error(f"Ошибка при обработке ссылок: {e}", exc_info=True)
         await message.answer("Произошла ошибка при обработке ссылок.")
 
     # Сбрасываем состояние
     await state.clear()
+
 
 @router.message(Command("logs"))
 async def send_logs(message: Message):
