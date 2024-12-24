@@ -31,6 +31,7 @@ router = Router()
 # Состояния для FSM
 class LinkStates(StatesGroup):
     waiting_for_links = State()
+    waiting_for_client_name = State()  # Ожидание имени клиента
 
 
 # Память для хранения состояний (можно заменить на Redis или другой storage)
@@ -50,10 +51,24 @@ async def start_command(message: Message):
 @router.message(Command("links_to_presentations"))
 async def links_to_presentations_command(message: Message, state: FSMContext):
     """Обработчик команды /links_to_presentations."""
-    await message.answer(
-        "Отправь мне список ссылок (каждую ссылку с новой строки), и я создам презентации для тебя."
-    )
-    # Устанавливаем состояние "ожидание ссылок"
+    await message.answer("Пожалуйста, укажите имя клиента, для которого создаются презентации.")
+    # Устанавливаем состояние ожидания имени клиента
+    await state.set_state(LinkStates.waiting_for_client_name)
+
+@router.message(LinkStates.waiting_for_client_name)
+async def handle_client_name(message: Message, state: FSMContext):
+    """Обрабатываем имя клиента и запрашиваем ссылки."""
+    client_name = message.text.strip()
+
+    if not client_name:
+        await message.answer("Пожалуйста, введите корректное имя клиента.")
+        return
+
+    # Сохраняем имя клиента в состояние FSM
+    await state.update_data(client_name=client_name)
+
+    # Переходим к запросу ссылок
+    await message.answer("Теперь отправьте список ссылок (каждая ссылка с новой строки).")
     await state.set_state(LinkStates.waiting_for_links)
 
 
@@ -62,9 +77,11 @@ async def handle_links(message: Message, state: FSMContext):
     """Обработчик сообщений с ссылками в состоянии ожидания."""
     # Получаем ссылки из сообщения
     links = message.text.strip().splitlines()
+    links_clean = [link for link in links if link not in ["", "\n"]]
+
 
     # Проверяем, что каждая строка является ссылкой
-    invalid_links = [link for link in links if not URL_REGEX.match(link)]
+    invalid_links = [link for link in links_clean if not URL_REGEX.match(link)]
 
     if invalid_links:
         # Если есть некорректные ссылки, запросить повторный ввод
@@ -74,17 +91,25 @@ async def handle_links(message: Message, state: FSMContext):
         )
         return
 
-    if not links:
+    if not links_clean:
         await message.answer("Пожалуйста, отправьте хотя бы одну ссылку.")
         return
 
-    await message.answer("Обрабатываю ссылки, это может занять некоторое время...")
+    data = await state.get_data()
+    client_name = data.get("client_name")
+
+    if not client_name:
+        await message.answer("Произошла ошибка. Пожалуйста, начните с указания имени клиента.")
+        return
+
+    await message.answer(f"Начинаю обработку ссылок для клиента: {client_name}")
+
 
     log_file = get_log_file()  # Уникальный файл для логов
 
     try:
         # Обрабатываем ссылки
-        await process_links_with_orchestrator(links, log_file, message)
+        await process_links_with_orchestrator(links, log_file, message, client_name)
 
         await message.answer("Обработка завершена. Отправляю презентации...")
 

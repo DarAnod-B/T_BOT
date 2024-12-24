@@ -27,6 +27,11 @@ def save_links_to_file(links, filename="links.txt") -> str:
         file.write("\n".join(links))
     return links_path
 
+async def handle_error(e, message, status_callback, specific_message=None):
+    """Обработка ошибок с обновлением статуса и логированием."""
+    error_message = specific_message or f"❌ Ошибка при выполнении: {str(e)}"
+    await update_status(message, error_message, status_callback)
+    logging.error(error_message, exc_info=True)
 
 async def update_status(
     message: Message, log_message: str, status_callback: Callable[[str], None] = None
@@ -42,6 +47,7 @@ async def process_links_with_orchestrator(
     links,
     log_file: str,
     message: Message,
+    client_name: str = None,
     status_callback: Callable[[str], None] = None,
 ):
     """Обрабатывает ссылки с помощью оркестратора и сохраняет логи."""
@@ -49,7 +55,7 @@ async def process_links_with_orchestrator(
     logging.basicConfig(filename=log_file, level=logging.INFO)
 
     # Сохраняем ссылки в файл
-    links_path = save_links_to_file(links)
+    save_links_to_file(links)
 
     try:
         stages = [
@@ -89,6 +95,7 @@ async def process_links_with_orchestrator(
                     "INPUT_PATH": "/app/data/table/data.csv",
                     "PRESENTATION_PATH": "/app/data/presentation/output/",
                     "CONFIG_PATH": "/app/data/config.env",
+                    "CLIENT_NAME":client_name,
                 },
                 "✅ Обработка таблиц завершена",
             ),
@@ -108,8 +115,19 @@ async def process_links_with_orchestrator(
             message, "🎉 Все процессы успешно завершены!", status_callback
         )
         return logs
+    except OSError as e:
+        if e.winerror == 121:
+            await handle_error(e, message, status_callback, 
+                            specific_message="❌ Ошибка при выполнении, повторите запрос.")
+        else:
+            await handle_error(e, message, status_callback)
+            raise RuntimeError("Ошибка при запуске оркестратора") from e
+
     except Exception as e:
-        error_message = f"❌ Ошибка при выполнении: {str(e)}"
-        await update_status(message, error_message, status_callback)
-        logging.error("❌ Ошибка при запуске оркестратора.", exc_info=True)
+        await handle_error(e, message, status_callback)
         raise RuntimeError("Ошибка при запуске оркестратора") from e
+
+
+
+
+
