@@ -51,7 +51,7 @@ async def start_command(message: Message):
 @router.message(Command("links_to_presentations"))
 async def links_to_presentations_command(message: Message, state: FSMContext):
     """Обработчик команды /links_to_presentations."""
-    await message.answer("Пожалуйста, укажите имя клиента, для которого создаются презентации.")
+    await message.answer("👤 Пожалуйста, укажите имя клиента, для которого создаются презентации.")
     # Устанавливаем состояние ожидания имени клиента
     await state.set_state(LinkStates.waiting_for_client_name)
 
@@ -68,7 +68,7 @@ async def handle_client_name(message: Message, state: FSMContext):
     await state.update_data(client_name=client_name)
 
     # Переходим к запросу ссылок
-    await message.answer("Теперь отправьте список ссылок (каждая ссылка с новой строки).")
+    await message.answer("🔗 Теперь отправьте список ссылок (каждая ссылка с новой строки).")
     await state.set_state(LinkStates.waiting_for_links)
 
 

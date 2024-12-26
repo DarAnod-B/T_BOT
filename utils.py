@@ -27,11 +27,13 @@ def save_links_to_file(links, filename="links.txt") -> str:
         file.write("\n".join(links))
     return links_path
 
+
 async def handle_error(e, message, status_callback, specific_message=None):
     """Обработка ошибок с обновлением статуса и логированием."""
     error_message = specific_message or f"❌ Ошибка при выполнении: {str(e)}"
     await update_status(message, error_message, status_callback)
     logging.error(error_message, exc_info=True)
+
 
 async def update_status(
     message: Message, log_message: str, status_callback: Callable[[str], None] = None
@@ -95,7 +97,7 @@ async def process_links_with_orchestrator(
                     "INPUT_PATH": "/app/data/table/data.csv",
                     "PRESENTATION_PATH": "/app/data/presentation/output/",
                     "CONFIG_PATH": "/app/data/config.env",
-                    "CLIENT_NAME":client_name,
+                    "CLIENT_NAME": client_name,
                 },
                 "✅ Обработка таблиц завершена",
             ),
@@ -117,8 +119,12 @@ async def process_links_with_orchestrator(
         return logs
     except OSError as e:
         if e.winerror == 121:
-            await handle_error(e, message, status_callback, 
-                            specific_message="❌ Ошибка при выполнении, повторите запрос.")
+            await handle_error(
+                e,
+                message,
+                status_callback,
+                specific_message="❌ Ошибка при выполнении, повторите запрос.",
+            )
         else:
             await handle_error(e, message, status_callback)
             raise RuntimeError("Ошибка при запуске оркестратора") from e
@@ -126,8 +132,3 @@ async def process_links_with_orchestrator(
     except Exception as e:
         await handle_error(e, message, status_callback)
         raise RuntimeError("Ошибка при запуске оркестратора") from e
-
-
-
-
-
