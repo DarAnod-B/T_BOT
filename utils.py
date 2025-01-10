@@ -1,13 +1,14 @@
 import os
 import logging
 import uuid
-from orchestrator import run_container
-from typing import Callable
+from typing import Callable, List, Tuple, Dict
 from aiogram.types import Message
+from .orchestrator import run_container
 
 # Глобальные пути
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
+STAGES_OF_PRESENTATION_CREATION = [1, 2, 3]
 
 # Создаем директорию для логов, если ее нет
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -19,8 +20,8 @@ def get_log_file() -> str:
     return os.path.join(LOG_DIR, log_filename)
 
 
-def save_links_to_file(links, filename="links.txt") -> str:
-    """Сохраняет ссылки в файл."""
+def save_links_to_file(links: List[str], filename="links.txt") -> str:
+    """Сохраняет список ссылок в файл."""
     links_path = os.path.join(DATA_DIR, "table", filename)
     os.makedirs(os.path.dirname(links_path), exist_ok=True)
     with open(links_path, "w") as file:
@@ -28,11 +29,21 @@ def save_links_to_file(links, filename="links.txt") -> str:
     return links_path
 
 
-async def handle_error(e, message, status_callback, specific_message=None):
-    """Обработка ошибок с обновлением статуса и логированием."""
+async def handle_error(
+    e: Exception, message: Message, status_callback: Callable[[str], None] = None, specific_message: str = None
+):
+    """Обработка ошибок с логированием и отправкой сообщения в Telegram."""
     error_message = specific_message or f"❌ Ошибка при выполнении: {str(e)}"
-    await update_status(message, error_message, status_callback)
+    detailed_error = f"‼️ *Произошла ошибка:*\n```\n{str(e)}\n```"
+
     logging.error(error_message, exc_info=True)
+
+    # Обновляем статус через callback (если он есть)
+    if status_callback:
+        status_callback(error_message)
+
+    # Отправляем сообщение в Telegram
+    await message.answer(detailed_error, parse_mode="MarkdownV2")
 
 
 async def update_status(
@@ -45,90 +56,104 @@ async def update_status(
     await message.answer(log_message)
 
 
-async def process_links_with_orchestrator(
-    links,
-    log_file: str,
-    message: Message,
-    client_name: str = None,
-    status_callback: Callable[[str], None] = None,
-):
-    """Обрабатывает ссылки с помощью оркестратора и сохраняет логи."""
-    # Настраиваем логирование для текущего запроса
-    logging.basicConfig(filename=log_file, level=logging.INFO)
+def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[str, str], str]]:
+    """Возвращает список этапов для обработки ссылок."""
+    return [
+        # (
+        #     "🔄 Этап 1/4: Парсинг данных...",
+        #     "parser_image",
+        #     {
+        #         "INPUT_PATH": "/app/data/table/links.txt",
+        #         "OUTPUT_PATH": "/app/data/table/data.csv",
+        #     },
+        #     "✅ Парсинг завершен",
+        # ),
+        # (
+        #     "🔄 Этап 2/4: Переписывание текста...",
+        #     "rewriter_image",
+        #     {
+        #         "INPUT_PATH": "/app/data/table/data.csv",
+        #         "MAX_SYMBOL": "995",
+        #         "COLUMN_NAME": "Описание",
+        #     },
+        #     "✅ Переписывание завершено",
+        # ),
+        # (
+        #     "🔄 Этап 3/4: Создание презентации...",
+        #     "presentation_image",
+        #     {
+        #         "INPUT_PATH": "/app/data/table/data.csv",
+        #         "OUTPUT_PATH": "/app/data/presentation/output/",
+        #         "PIC_PATH": "/app/data/presentation/pic/",
+        #         "TEMPLATE_PATH": "/app/data/presentation/template/Упрощенный_белый_шаблон.pptx",
+        #     },
+        #     "✅ Создание презентации завершено",
+        # ),
+        (
+            "🔄 Этап 4/4: Обработка таблиц...",
+            "sheet_tools_image",
+            {
+                "INPUT_PATH": "/app/data/table/data.csv",
+                "PRESENTATION_PATH": "/app/data/presentation/output/",
+                "CONFIG_PATH": "/app/data/config/config.env",
+                "CLIENT_NAME": client_name,
+            },
+            "✅ Обработка таблиц завершена",
+        ),
+    ]
 
-    # Сохраняем ссылки в файл
+
+async def process_stage(
+    stage_info: Tuple[str, str, Dict[str, str], str], message: Message, status_callback: Callable[[str], None]
+) -> Tuple[bool, str]:
+    """Обрабатывает один этап с помощью контейнера."""
+    start_message, image_name, environment, end_message = stage_info
+    await update_status(message, start_message, status_callback)
+
+    stage_logs, exit_code = run_container(image_name, environment=environment)
+
+    if exit_code != 0:
+        return False, stage_logs
+
+    await update_status(message, end_message, status_callback)
+    return True, stage_logs
+
+
+async def process_links_with_orchestrator(
+    links: List[str], log_file: str, message: Message, client_name: str = None, status_callback: Callable[[str], None] = None
+) -> bool:
+    """Обрабатывает ссылки с помощью оркестратора и сохраняет логи."""
+    logging.basicConfig(filename=log_file, level=logging.INFO)
     save_links_to_file(links)
 
     try:
-        stages = [
-            (
-                "🔄 Этап 1/4: Парсинг данных...",
-                "parser_image",
-                {
-                    "INPUT_PATH": "/app/data/table/links.txt",
-                    "OUTPUT_PATH": "/app/data/table/data.csv",
-                },
-                "✅ Парсинг завершен",
-            ),
-            (
-                "🔄 Этап 2/4: Переписывание текста...",
-                "rewriter_image",
-                {
-                    "INPUT_PATH": "/app/data/table/data.csv",
-                    "MAX_SYMBOL": "995",
-                    "COLUMN_NAME": "Описание",
-                },
-                "✅ Переписывание завершено",
-            ),
-            (
-                "🔄 Этап 3/4: Создание презентации...",
-                "presentation_image",
-                {
-                    "INPUT_PATH": "/app/data/table/data.csv",
-                    "OUTPUT_PATH": "/app/data/presentation/output/",
-                    "TEMPLATE": "/app/data/presentation/template/Упрощенный_белый_шаблон.pptx",
-                },
-                "✅ Создание презентации завершено",
-            ),
-            (
-                "🔄 Этап 4/4: Обработка таблиц...",
-                "sheet_tools_image",
-                {
-                    "INPUT_PATH": "/app/data/table/data.csv",
-                    "PRESENTATION_PATH": "/app/data/presentation/output/",
-                    "CONFIG_PATH": "/app/data/config.env",
-                    "CLIENT_NAME": client_name,
-                },
-                "✅ Обработка таблиц завершена",
-            ),
-        ]
-
+        stages = get_processing_stages(client_name)
         logs = []
+
         await update_status(message, "📝 Начало обработки ссылок...", status_callback)
 
-        for stage_info in stages:
-            start_message, image_name, environment, end_message = stage_info
-            await update_status(message, start_message, status_callback)
-            stage_logs = run_container(image_name, environment=environment)
+        for stage_index, stage_info in enumerate(stages, start=1):
+            success, stage_logs = await process_stage(stage_info, message, status_callback)
             logs.append(stage_logs)
-            await update_status(message, end_message, status_callback)
+            if not success:
+                await handle_error(
+                    f"Ошибка при выполнении этапа: {stage_info[0]}", message, status_callback
+                )
+                if stage_index not in STAGES_OF_PRESENTATION_CREATION:
+                    return True
+                else:
+                    return False
 
-        await update_status(
-            message, "🎉 Все процессы успешно завершены!", status_callback
-        )
-        return logs
+        await update_status(message, "🎉 Все процессы успешно завершены!", status_callback)
+        return True
     except OSError as e:
-        if e.winerror == 121:
+        if getattr(e, "winerror", None) == 121:
             await handle_error(
-                e,
-                message,
-                status_callback,
-                specific_message="❌ Ошибка при выполнении, повторите запрос.",
+                e, message, status_callback, specific_message="❌ Ошибка при выполнении, повторите запрос."
             )
         else:
             await handle_error(e, message, status_callback)
-            raise RuntimeError("Ошибка при запуске оркестратора") from e
-
+        return False
     except Exception as e:
         await handle_error(e, message, status_callback)
-        raise RuntimeError("Ошибка при запуске оркестратора") from e
+        return False
