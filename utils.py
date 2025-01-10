@@ -59,36 +59,36 @@ async def update_status(
 def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[str, str], str]]:
     """Возвращает список этапов для обработки ссылок."""
     return [
-        # (
-        #     "🔄 Этап 1/4: Парсинг данных...",
-        #     "parser_image",
-        #     {
-        #         "INPUT_PATH": "/app/data/table/links.txt",
-        #         "OUTPUT_PATH": "/app/data/table/data.csv",
-        #     },
-        #     "✅ Парсинг завершен",
-        # ),
-        # (
-        #     "🔄 Этап 2/4: Переписывание текста...",
-        #     "rewriter_image",
-        #     {
-        #         "INPUT_PATH": "/app/data/table/data.csv",
-        #         "MAX_SYMBOL": "995",
-        #         "COLUMN_NAME": "Описание",
-        #     },
-        #     "✅ Переписывание завершено",
-        # ),
-        # (
-        #     "🔄 Этап 3/4: Создание презентации...",
-        #     "presentation_image",
-        #     {
-        #         "INPUT_PATH": "/app/data/table/data.csv",
-        #         "OUTPUT_PATH": "/app/data/presentation/output/",
-        #         "PIC_PATH": "/app/data/presentation/pic/",
-        #         "TEMPLATE_PATH": "/app/data/presentation/template/Упрощенный_белый_шаблон.pptx",
-        #     },
-        #     "✅ Создание презентации завершено",
-        # ),
+        (
+            "🔄 Этап 1/4: Парсинг данных...",
+            "parser_image",
+            {
+                "INPUT_PATH": "/app/data/table/links.txt",
+                "OUTPUT_PATH": "/app/data/table/data.csv",
+            },
+            "✅ Парсинг завершен",
+        ),
+        (
+            "🔄 Этап 2/4: Переписывание текста...",
+            "rewriter_image",
+            {
+                "INPUT_PATH": "/app/data/table/data.csv",
+                "MAX_SYMBOL": "995",
+                "COLUMN_NAME": "Описание",
+            },
+            "✅ Переписывание завершено",
+        ),
+        (
+            "🔄 Этап 3/4: Создание презентации...",
+            "presentation_image",
+            {
+                "INPUT_PATH": "/app/data/table/data.csv",
+                "OUTPUT_PATH": "/app/data/presentation/output/",
+                "PIC_PATH": "/app/data/presentation/pic/",
+                "TEMPLATE_PATH": "/app/data/presentation/template/Упрощенный_белый_шаблон.pptx",
+            },
+            "✅ Создание презентации завершено",
+        ),
         (
             "🔄 Этап 4/4: Обработка таблиц...",
             "sheet_tools_image",
