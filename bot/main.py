@@ -7,8 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from imp import reload
 
 from ..config.config import BOT_TOKEN
-from ..bot.handlers import router
-
+from .handlers import router
 
 reload(logging)
 

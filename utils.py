@@ -8,7 +8,7 @@ from .orchestrator import run_container
 # Глобальные пути
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
-STAGES_OF_PRESENTATION_CREATION = [1, 2, 3]
+STAGES_OF_PRESENTATION_CREATION = [1, 2, 3, 4]
 
 # Создаем директорию для логов, если ее нет
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -60,8 +60,8 @@ def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[
     """Возвращает список этапов для обработки ссылок."""
     return [
         (
-            "🔄 Этап 1/4: Парсинг данных...",
-            "parser_image",
+            "🔄 Этап 1/5: Парсинг данных...",
+            "cian_deep_page_parser",
             {
                 "INPUT_PATH": "/app/data/table/links.txt",
                 "OUTPUT_PATH": "/app/data/table/data.csv",
@@ -69,7 +69,7 @@ def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[
             "✅ Парсинг завершен",
         ),
         (
-            "🔄 Этап 2/4: Переписывание текста...",
+            "🔄 Этап 2/5: Переписывание текста...",
             "rewriter_image",
             {
                 "INPUT_PATH": "/app/data/table/data.csv",
@@ -79,7 +79,17 @@ def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[
             "✅ Переписывание завершено",
         ),
         (
-            "🔄 Этап 3/4: Создание презентации...",
+            "🔄 Этап 3/5: Обработка изображений...",
+            "image_processor",
+            {
+                "INPUT_PATH": "/app/data/table/data.csv",
+                "MASK_DIR_PATH": "/app/data/mask/",
+                "BASE_IMAGE_DIR_PATH":  "/app/data/presentation/pic/",
+            },
+            "✅ Обработка таблиц завершена",
+        ),
+        (
+            "🔄 Этап 4/5: Создание презентации...",
             "presentation_image",
             {
                 "INPUT_PATH": "/app/data/table/data.csv",
@@ -90,7 +100,7 @@ def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[
             "✅ Создание презентации завершено",
         ),
         (
-            "🔄 Этап 4/4: Обработка таблиц...",
+            "🔄 Этап 5/5: Обработка таблиц...",
             "sheet_tools_image",
             {
                 "INPUT_PATH": "/app/data/table/data.csv",

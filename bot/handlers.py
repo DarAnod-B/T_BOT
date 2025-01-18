@@ -16,8 +16,8 @@ URL_REGEX = re.compile(
     r"([\/\w\.-]*)*\/?$"  # Путь
 )
 # Папка, где хранятся презентации
-PRESENTATION_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data", "presentation", "output"
+PRESENTATION_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "data", "presentation", "output")
 )
 
 # Настраиваем логирование
