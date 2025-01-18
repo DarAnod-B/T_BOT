@@ -7,12 +7,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from imp import reload
 
 from ..config.config import BOT_TOKEN
-from .handlers import router
+from .handlers import routers  # Импортируем список роутеров
 
 reload(logging)
 
 # Настройка логирования
-LOG_FILENAME = f"T_BOT/logs/bot_{datetime.now().strftime('%Y%m%d_%H-%M-%S')}.log"
+LOG_FILENAME = f"T_BOT/bot/logs/bot_{datetime.now().strftime('%Y%m%d_%H-%M-%S')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -43,13 +43,14 @@ def init_bot() -> tuple[Bot, Dispatcher]:
         logger.critical(f"Ошибка при инициализации: {e}")
         raise
 
-# Функция регистрации роутера
-def register_router(dp: Dispatcher):
+# Функция регистрации роутеров
+def register_routers(dp: Dispatcher):
     try:
-        dp.include_router(router)
-        logger.info("Роутер успешно зарегистрирован.")
+        for router in routers:
+            dp.include_router(router)
+        logger.info("Роутеры успешно зарегистрированы.")
     except Exception as e:
-        logger.error(f"Ошибка при регистрации роутера: {e}")
+        logger.error(f"Ошибка при регистрации роутеров: {e}")
         raise
 
 # Основная асинхронная функция
@@ -57,7 +58,7 @@ async def main():
     logger.info("Запуск бота...")
     
     bot, dp = init_bot()
-    register_router(dp)
+    register_routers(dp)
 
     try:
         # Установка команд бота
