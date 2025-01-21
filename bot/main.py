@@ -43,14 +43,13 @@ def init_bot() -> tuple[Bot, Dispatcher]:
         logger.critical(f"Ошибка при инициализации: {e}")
         raise
 
-# Функция регистрации роутеров
-def register_routers(dp: Dispatcher):
+# Функция регистрации роутера
+def register_router(dp: Dispatcher):
     try:
-        for router in routers:
-            dp.include_router(router)
-        logger.info("Роутеры успешно зарегистрированы.")
+        dp.include_router(router)
+        logger.info("Роутер успешно зарегистрирован.")
     except Exception as e:
-        logger.error(f"Ошибка при регистрации роутеров: {e}")
+        logger.error(f"Ошибка при регистрации роутера: {e}")
         raise
 
 # Основная асинхронная функция
@@ -58,7 +57,7 @@ async def main():
     logger.info("Запуск бота...")
     
     bot, dp = init_bot()
-    register_routers(dp)
+    register_router(dp)
 
     try:
         # Установка команд бота

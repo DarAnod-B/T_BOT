@@ -3,7 +3,7 @@ import logging
 import uuid
 from typing import Callable, List, Tuple, Dict
 from aiogram.types import Message
-from ...orchestrator import run_container
+from .orchestrator import run_container
 
 logger = logging.getLogger(__name__)
 
@@ -91,17 +91,17 @@ def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[
             },
             "✅ Создание презентации завершено",
         ),
-        # (
-        #     "🔄 Этап 5/5: Обработка таблиц...",
-        #     "sheet_tools_image",
-        #     {
-        #         "INPUT_PATH": "/app/data/table/data.csv",
-        #         "PRESENTATION_PATH": "/app/data/presentation/output/",
-        #         "CONFIG_PATH": "/app/data/config/config.env",
-        #         "CLIENT_NAME": client_name,
-        #     },
-        #     "✅ Обработка таблиц завершена",
-        # ),
+        (
+            "🔄 Этап 5/5: Обработка таблиц...",
+            "sheet_tools_image",
+            {
+                "INPUT_PATH": "/app/data/table/data.csv",
+                "PRESENTATION_PATH": "/app/data/presentation/output/",
+                "CONFIG_PATH": "/app/data/config/config.env",
+                "CLIENT_NAME": client_name,
+            },
+            "✅ Обработка таблиц завершена",
+        ),
     ]
 
 
