@@ -1,6 +1,5 @@
 import os
 import logging
-import uuid
 from typing import Callable, List, Tuple, Dict
 from aiogram.types import Message
 from .orchestrator import run_container
@@ -92,7 +91,7 @@ def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[
             "✅ Создание презентации завершено",
         ),
         (
-            "🔄 Этап 5/5: Обработка таблиц...",
+            "🔄 Этап 5/5: Отправка данных в Google таблицу...",
             "sheet_tools_image",
             {
                 "INPUT_PATH": "/app/data/table/data.csv",
