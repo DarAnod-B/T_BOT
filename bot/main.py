@@ -6,16 +6,16 @@ from aiogram.types import BotCommand
 from aiogram.fsm.storage.memory import MemoryStorage
 from imp import reload
 
-from ..config.config import BOT_TOKEN
-from .handlers import router
+from .config.config import BOT_TOKEN
+from bot.handlers import router
 
 reload(logging)
 
 # Настройка логирования
-LOG_FILENAME = f"T_BOT/logs/bot_{datetime.now().strftime('%Y%m%d_%H-%M-%S')}.log"
+LOG_FILENAME = f"logs/bot_{datetime.now().strftime('%Y%m%d_%H-%M-%S')}.log"
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s %(message)s",  # Добавляем %(name)s для идентификации источника логов
     handlers=[
         logging.FileHandler(LOG_FILENAME, encoding="utf-8"),
         logging.StreamHandler()

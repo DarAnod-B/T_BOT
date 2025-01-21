@@ -5,19 +5,11 @@ from typing import Callable, List, Tuple, Dict
 from aiogram.types import Message
 from .orchestrator import run_container
 
+logger = logging.getLogger(__name__)
+
 # Глобальные пути
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
-LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
 STAGES_OF_PRESENTATION_CREATION = [1, 2, 3, 4]
-
-# Создаем директорию для логов, если ее нет
-os.makedirs(LOG_DIR, exist_ok=True)
-
-
-def get_log_file() -> str:
-    """Создает уникальный файл для логов текущего запроса."""
-    log_filename = f"log_{uuid.uuid4()}.log"
-    return os.path.join(LOG_DIR, log_filename)
 
 
 def save_links_to_file(links: List[str], filename="links.txt") -> str:
@@ -36,7 +28,7 @@ async def handle_error(
     error_message = specific_message or f"❌ Ошибка при выполнении: {str(e)}"
     detailed_error = f"‼️ *Произошла ошибка:*\n```\n{str(e)}\n```"
 
-    logging.error(error_message, exc_info=True)
+    logger.error(error_message, exc_info=True)
 
     # Обновляем статус через callback (если он есть)
     if status_callback:
@@ -52,7 +44,7 @@ async def update_status(
     """Отправляет сообщение в Telegram и логирует."""
     if status_callback:
         status_callback(log_message)
-    logging.info(log_message)
+    logger.info(log_message)
     await message.answer(log_message)
 
 
@@ -130,15 +122,14 @@ async def process_stage(
 
 
 async def process_links_with_orchestrator(
-    links: List[str], log_file: str, message: Message, client_name: str = None, status_callback: Callable[[str], None] = None
+    links: List[str], message: Message, client_name: str = None, status_callback: Callable[[str], None] = None
 ) -> bool:
     """Обрабатывает ссылки с помощью оркестратора и сохраняет логи."""
-    logging.basicConfig(filename=log_file, level=logging.INFO)
     save_links_to_file(links)
 
     try:
         stages = get_processing_stages(client_name)
-        logs = []
+        logs = []   
 
         await update_status(message, "📝 Начало обработки ссылок...", status_callback)
 
