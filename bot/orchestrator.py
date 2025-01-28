@@ -1,116 +1,102 @@
-import docker
+import aiodocker
+import asyncio
 import os
-import time
-import traceback
 import logging
+from contextlib import asynccontextmanager
 
+# Используем модульный логгер
+logger = logging.getLogger(__name__)
+data_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
 
-def stream_logs(container):
-    """
-    Поток для стриминга логов контейнера.
-    """
-    logging.info(f"Подписка на логи контейнера {container.short_id}...")
-    try:
-        for log in container.logs(stream=True, follow=True):
-            logging.info(
-                f"[{container.short_id}] {log.decode('utf-8').strip()}"
-            )
-    except Exception as e:
-        logging.error(
-            f"Ошибка при чтении логов контейнера {container.short_id}: {e}"
-        )
+class Orchestrator:
+    def __init__(self):
+        self.docker = None
+        self.active_containers = set()
 
+    async def initialize(self):
+        """Асинхронная инициализация Docker клиента"""
+        self.docker = aiodocker.Docker()
+        logger.info("Docker client initialized")
 
-try:
-    client = docker.from_env()
-    logging.info("Успешно подключились к Docker")
-except docker.errors.DockerException as e:
-    logging.critical(
-        f"Ошибка при подключении к Docker, проверьте, запущен ли Docker: {e}"
-    )
-    exit(1)
-# Получаем абсолютный путь к директории data
-data_path = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "data")
-)
-
-
-def run_container(
-    image_name, environment=None, command=None, retries=3, delay=20
-):
-    """
-    Запуск контейнера с динамической передачей параметров с обработкой ошибок и повторным запуском.
-
-    :param image_name: Имя образа контейнера.
-    :param environment: Переменные окружения для контейнера.
-    :param command: Команда для выполнения в контейнере.
-    :param retries: Количество попыток в случае ошибки.
-    :param delay: Задержка в секундах между повторными попытками.
-    :return: Логи контейнера.
-    """
-    attempt = 0  # Счетчик попыток запуска
-    while attempt < retries:
+    @asynccontextmanager
+    async def managed_container(self, container):
+        self.active_containers.add(container.id)
         try:
-            logging.info(
-                f"Попытка {attempt + 1} из {retries} запуска контейнера {image_name}"
-            )
+            yield container
+        finally:
+            await self.cleanup_container(container.id)
 
-            container = client.containers.run(
-                image_name,
-                detach=True,
-                volumes={
-                    data_path: {
-                        "bind": "/app/data",
-                        "mode": "rw",
-                    },  # Монтируем локальную директорию
-                },
-                environment=environment if environment else {},
-                command=command,
-            )
-            logging.info(
-                f"Запущен контейнер {image_name}, id: {container.short_id}"
-            )
+    async def cleanup_container(self, container_id):
+        try:
+            container = await self.docker.containers.get(container_id)
+            await container.delete(force=True)
+            self.active_containers.discard(container_id)
+            logger.info(f"Container {container_id[:12]} cleaned up")
+        except aiodocker.exceptions.DockerError as e:
+            logger.error(f"Error cleaning up container {container_id}: {e}")
 
-            # Стримим логи контейнера
-            stream_logs(container)
-
-            # Ждем завершения контейнера
-            result = container.wait()
-            exit_code = result["StatusCode"]
-
-            if exit_code != 0:
-                logging.error(
-                    f"Контейнер {image_name} завершился с ошибкой. Код выхода: {exit_code}"
-                )
-            else:
-                logging.info(f"Контейнер {image_name} завершился успешно.")
-
-            logs = container.logs().decode("utf-8")
-
-            # Удаляем контейнер
-            try:
-                if client.containers.get(container.id):
-                    container.remove()
-            except docker.errors.NotFound:
-                pass
-
-            logging.info(f"Контейнер {container.short_id} удалён.")
-
-            return logs, exit_code
-
+    async def stream_logs(self, container):
+        container_id = container.id[:12]
+        try:
+            logger.info(f"Starting log stream for {container_id}")
+            async for line in container.log(stdout=True, stderr=True, follow=True):
+                try:
+                    log_line = line.decode("utf-8", errors="replace").strip() if isinstance(line, bytes) else line.strip()
+                    logger.info(f"[{container_id}] {log_line}")
+                except Exception as e:
+                    logger.error(f"Log processing error: {e}")
         except Exception as e:
-            attempt += 1
-            logging.error(
-                f"Ошибка при запуске контейнера {image_name}: {e}",
-                exc_info=True,
-            )
-            logging.error(f"Попытка {attempt} из {retries}")
-            traceback.print_exc()
+            logger.error(f"Log stream error for {container_id}: {e}")
+        finally:
+            logger.info(f"Log stream ended for {container_id}")
 
-            if attempt >= retries:
-                logging.critical(
-                    f"Не удалось запустить контейнер {image_name} после {retries} попыток."
-                )
-                raise e
+    async def run_container(
+        self,
+        image_name: str,
+        environment: dict = None,
+        command: str = None,
+        retries: int = 3,
+        delay: int = 20
+    ):
+        for attempt in range(1, retries + 1):
+            try:
+                logger.info(f"Attempt {attempt}/{retries} to run {image_name}")
 
-            time.sleep(delay)
+                config = {
+                    "Image": image_name,
+                    "Env": [f"{k}={v}" for k, v in (environment or {}).items()],
+                    "HostConfig": {"Binds": [f"{data_path}:/app/data:rw"]}
+                }
+                if command:
+                    config["Cmd"] = command.split()
+
+                container = await self.docker.containers.create(config)
+                async with self.managed_container(container):
+                    await container.start()
+                    log_task = asyncio.create_task(self.stream_logs(container))
+                    
+                    try:
+                        result = await container.wait()
+                        logs = await container.log(stdout=True, stderr=True)
+                        decoded_logs = "".join([
+                            line.decode("utf-8", errors="replace") if isinstance(line, bytes) else line
+                            for line in logs
+                        ])
+                        return decoded_logs, result["StatusCode"]
+                    finally:
+                        await log_task  # Ждем завершения задачи логирования
+                        
+            except aiodocker.exceptions.DockerError as e:
+                logger.error(f"Container error: {e}, attempt {attempt}/{retries}")
+                if attempt == retries:
+                    raise
+                await asyncio.sleep(delay)
+
+    async def shutdown(self):
+        logger.info("Cleaning up all containers...")
+        await asyncio.gather(*(self.cleanup_container(cid) for cid in self.active_containers))
+        if self.docker:
+            await self.docker.close()
+            logger.info("Docker client closed")
+
+orchestrator = Orchestrator()

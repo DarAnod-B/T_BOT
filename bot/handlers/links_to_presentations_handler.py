@@ -31,19 +31,28 @@ class LinkStates(StatesGroup):
 
 
 
-@links_to_presentations_router .message(Command("links_to_presentations"))
+@links_to_presentations_router.message(Command("links_to_presentations"))
 async def links_to_presentations(message: Message, state: FSMContext):
     """Обработчик команды /links_to_presentations."""
-    await message.answer(
-        "👤 Пожалуйста, укажите имя клиента, для которого создаются презентации."
-    )
-    # Устанавливаем состояние ожидания имени клиента
+    current_state = await state.get_state()
+    
+    # Проверяем, есть ли активная задача у пользователя
+    if current_state and current_state.startswith("LinkStates"):
+        await message.answer("❌ Задача уже выполняется. Дождитесь её завершения!")
+        return
+
+    await message.answer("👤 Пожалуйста, укажите имя клиента.")
     await state.set_state(LinkStates.waiting_for_client_name)
+
 
 
 @links_to_presentations_router.message(LinkStates.waiting_for_client_name)
 async def handle_client_name(message: Message, state: FSMContext):
     """Обрабатываем имя клиента и запрашиваем ссылки."""
+    current_state = await state.get_state()
+    if current_state != LinkStates.waiting_for_client_name:
+        await message.answer("❌ Задача уже выполняется. Дождитесь завершения!")
+        return
     client_name = message.text.strip()
 
     if not client_name:
@@ -63,40 +72,41 @@ async def handle_client_name(message: Message, state: FSMContext):
 @links_to_presentations_router.message(LinkStates.waiting_for_links)
 async def handle_links(message: Message, state: FSMContext):
     """Обработчик сообщений с ссылками в состоянии ожидания."""
-    # Получаем ссылки из сообщения
-    links = message.text.strip().splitlines()
-    links_clean = [link for link in links if link not in ["", "\n"]]
-
-    # Проверяем, что каждая строка является ссылкой
-    invalid_links = [link for link in links_clean if not URL_REGEX_CIAN.match(link)]
-
-    if invalid_links:
-        # Если есть некорректные ссылки, запросить повторный ввод
-        await message.answer(
-            "Некоторые строки не являются корректными ссылками. Пожалуйста, отправьте только ссылки. \n\n"
-            f"Некорректные строки: \n{chr(10).join(invalid_links)}"
-        )
-        return
-
-    if not links_clean:
-        await message.answer("Пожалуйста, отправьте хотя бы одну ссылку.")
-        return
-
-    data = await state.get_data()
-    client_name = data.get("client_name")
-
-    if not client_name:
-        await message.answer(
-            "Произошла ошибка. Пожалуйста, начните с указания имени клиента."
-        )
-        return
-
-    await message.answer(
-        f"Начинаю обработку ссылок для клиента: {client_name}"
-    )
-
 
     try:
+        # Получаем ссылки из сообщения
+        links = message.text.strip().splitlines()
+        links_clean = [link for link in links if link not in ["", "\n"]]
+
+        # Проверяем, что каждая строка является ссылкой
+        invalid_links = [link for link in links_clean if not URL_REGEX_CIAN.match(link)]
+
+        if invalid_links:
+            # Если есть некорректные ссылки, запросить повторный ввод
+            await message.answer(
+                "Некоторые строки не являются корректными ссылками. Пожалуйста, отправьте только ссылки. \n\n"
+                f"Некорректные строки: \n{chr(10).join(invalid_links)}"
+            )
+            return
+
+        if not links_clean:
+            await message.answer("Пожалуйста, отправьте хотя бы одну ссылку.")
+            return
+
+        data = await state.get_data()
+        client_name = data.get("client_name")
+
+        if not client_name:
+            await message.answer(
+                "Произошла ошибка. Пожалуйста, начните с указания имени клиента."
+            )
+            return
+
+        await message.answer(
+            f"Начинаю обработку ссылок для клиента: {client_name}"
+        )
+
+
         # Обрабатываем ссылки
         output_status = await process_links_with_orchestrator(
             links, message, client_name
@@ -131,7 +141,8 @@ async def handle_links(message: Message, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Ошибка при обработке ссылок: {e}", exc_info=True)
-        await message.answer("Произошла ошибка при обработке ссылок.")
+        await message.answer("🚨 Произошла критическая ошибка!")
+    finally:
+        # Всегда сбрасываем состояние, даже если была ошибка
+        await state.clear()
 
-    # Сбрасываем состояние
-    await state.clear()

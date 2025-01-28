@@ -13,7 +13,7 @@ log_router = Router()
 @log_router.message(Command("logs"))
 async def send_logs(message: Message):
     """Отправляем логи последнего запроса."""
-    log_path = os.path.join(os.path.dirname(__file__), "..","logs")
+    log_path = os.path.join(os.path.dirname(__file__), "..","..","logs")
     log_files = sorted(
         [os.path.join(log_path, f) for f in os.listdir(log_path) if f.endswith(".log")],
         key=lambda x: os.path.getmtime(os.path.join("logs", x)),

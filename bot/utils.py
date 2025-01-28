@@ -1,8 +1,9 @@
 import os
 import logging
-from typing import Callable, List, Tuple, Dict
+from typing import Callable, List, Tuple, Dict, Optional
 from aiogram.types import Message
-from .orchestrator import run_container
+from .orchestrator import orchestrator  # Импортируем глобальный асинхронный оркестратор
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -11,44 +12,57 @@ DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data")
 STAGES_OF_PRESENTATION_CREATION = [1, 2, 3, 4]
 
 
-def save_links_to_file(links: List[str], filename="links.txt") -> str:
-    """Сохраняет список ссылок в файл."""
+async def save_links_to_file(links: List[str], filename: str = "links.txt") -> str:
+    """Асинхронно сохраняет список ссылок в файл."""
     links_path = os.path.join(DATA_DIR, "table", filename)
     os.makedirs(os.path.dirname(links_path), exist_ok=True)
-    with open(links_path, "w") as file:
-        file.write("\n".join(links))
-    return links_path
+    
+    # Используем асинхронную запись в файл
+    try:
+        async with aiofiles.open(links_path, "w") as file:
+            await file.write("\n".join(links))
+        return links_path
+    except Exception as e:
+        logger.error(f"Error saving links: {e}")
+        raise
 
 
 async def handle_error(
-    e: Exception, message: Message, status_callback: Callable[[str], None] = None, specific_message: str = None
+    e: Exception,
+    message: Message,
+    status_callback: Optional[Callable[[str], None]] = None,
+    specific_message: Optional[str] = None
 ):
-    """Обработка ошибок с логированием и отправкой сообщения в Telegram."""
+    """Асинхронная обработка ошибок с логированием и отправкой сообщения."""
     error_message = specific_message or f"❌ Ошибка при выполнении: {str(e)}"
     detailed_error = f"‼️ *Произошла ошибка:*\n```\n{str(e)}\n```"
 
     logger.error(error_message, exc_info=True)
 
-    # Обновляем статус через callback (если он есть)
     if status_callback:
-        status_callback(error_message)
+        # Асинхронный callback, если требуется
+        await status_callback(error_message)
 
-    # Отправляем сообщение в Telegram
     await message.answer(detailed_error, parse_mode="MarkdownV2")
 
 
 async def update_status(
-    message: Message, log_message: str, status_callback: Callable[[str], None] = None
+    message: Message,
+    log_message: str,
+    status_callback: Optional[Callable[[str], None]] = None
 ):
-    """Отправляет сообщение в Telegram и логирует."""
-    if status_callback:
-        status_callback(log_message)
-    logger.info(log_message)
-    await message.answer(log_message)
+    """Асинхронное обновление статуса."""
+    try:
+        if status_callback:
+            await status_callback(log_message)
+        logger.info(log_message)
+        await message.answer(log_message)
+    except Exception as e:
+        logger.error(f"Error updating status: {e}")
 
 
-def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[str, str], str]]:
-    """Возвращает список этапов для обработки ссылок."""
+def get_processing_stages(client_name: Optional[str] = None) -> List[Tuple[str, str, Dict[str, str], str]]:
+    """Генерация этапов обработки (синхронная функция, не требует изменений)."""
     return [
         (
             "🔄 Этап 1/5: Парсинг данных...",
@@ -105,55 +119,64 @@ def get_processing_stages(client_name: str = None) -> List[Tuple[str, str, Dict[
 
 
 async def process_stage(
-    stage_info: Tuple[str, str, Dict[str, str], str], message: Message, status_callback: Callable[[str], None]
+    stage_info: Tuple[str, str, Dict[str, str], str],
+    message: Message,
+    status_callback: Callable[[str], None]
 ) -> Tuple[bool, str]:
-    """Обрабатывает один этап с помощью контейнера."""
+    """Асинхронная обработка одного этапа."""
     start_message, image_name, environment, end_message = stage_info
-    await update_status(message, start_message, status_callback)
-
-    stage_logs, exit_code = run_container(image_name, environment=environment)
-
-    if exit_code != 0:
-        return False, stage_logs
-
-    await update_status(message, end_message, status_callback)
-    return True, stage_logs
+    
+    try:
+        await update_status(message, start_message, status_callback)
+        
+        # Асинхронный запуск контейнера
+        logs, exit_code = await orchestrator.run_container(
+            image_name,
+            environment=environment
+        )
+        
+        if exit_code != 0:
+            error_msg = f"Этап завершился с ошибкой (код {exit_code})"
+            await message.answer(f"```\n{logs[-4000:]}\n```", parse_mode="MarkdownV2")
+            return False, logs
+        
+        await update_status(message, end_message, status_callback)
+        return True, logs
+    
+    except Exception as e:
+        logger.error(f"Stage error: {e}", exc_info=True)
+        return False, str(e)
 
 
 async def process_links_with_orchestrator(
-    links: List[str], message: Message, client_name: str = None, status_callback: Callable[[str], None] = None
+    links: List[str],
+    message: Message,
+    client_name: Optional[str] = None,
+    status_callback: Optional[Callable[[str], None]] = None
 ) -> bool:
-    """Обрабатывает ссылки с помощью оркестратора и сохраняет логи."""
-    save_links_to_file(links)
-
+    """Асинхронная обработка всех этапов."""
     try:
+        await save_links_to_file(links)
         stages = get_processing_stages(client_name)
-        logs = []   
+        logs = []
 
         await update_status(message, "📝 Начало обработки ссылок...", status_callback)
 
         for stage_index, stage_info in enumerate(stages, start=1):
             success, stage_logs = await process_stage(stage_info, message, status_callback)
             logs.append(stage_logs)
+            
             if not success:
-                await handle_error(
-                    f"Ошибка при выполнении этапа: {stage_info[0]}", message, status_callback
-                )
+                error_msg = f"Ошибка на этапе {stage_index}: {stage_info[0]}"
+                await handle_error(Exception(error_msg), message, status_callback)
+                
                 if stage_index not in STAGES_OF_PRESENTATION_CREATION:
                     return True
-                else:
-                    return False
+                return False
 
         await update_status(message, "🎉 Все процессы успешно завершены!", status_callback)
         return True
-    except OSError as e:
-        if getattr(e, "winerror", None) == 121:
-            await handle_error(
-                e, message, status_callback, specific_message="❌ Ошибка при выполнении, повторите запрос."
-            )
-        else:
-            await handle_error(e, message, status_callback)
-        return False
+    
     except Exception as e:
         await handle_error(e, message, status_callback)
         return False
