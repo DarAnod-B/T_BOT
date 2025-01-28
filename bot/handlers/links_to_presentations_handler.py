@@ -7,7 +7,7 @@ import os
 import logging
 import re
 
-from bot.utils import process_links_with_orchestrator 
+from bot.utils import process_links_with_orchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -15,44 +15,46 @@ URL_REGEX_CIAN = re.compile(
     r"^(https?:\/\/)?([\w-]+\.)?cian\.ru([\/\w\.\-\?&=%]*)?$",
     re.IGNORECASE
 )
+
 # Папка, где хранятся презентации
 PRESENTATION_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "data", "presentation", "output")
 )
 
 # Создаем роутер
-links_to_presentations_router  = Router()
+links_to_presentations_router = Router()
 
 
 # Состояния для FSM
 class LinkStates(StatesGroup):
     waiting_for_links = State()
     waiting_for_client_name = State()  # Ожидание имени клиента
-
+    processing_links = State()  # Процесс обработки ссылок
 
 
 @links_to_presentations_router.message(Command("links_to_presentations"))
 async def links_to_presentations(message: Message, state: FSMContext):
     """Обработчик команды /links_to_presentations."""
     current_state = await state.get_state()
-    
+
     # Проверяем, есть ли активная задача у пользователя
     if current_state and current_state.startswith("LinkStates"):
-        await message.answer("❌ Задача уже выполняется. Дождитесь её завершения!")
+        await message.answer(
+            "❌ У вас уже есть активная задача! \n"
+            "Дождитесь завершения текущей задачи.\n"
+        )
         return
 
-    await message.answer("👤 Пожалуйста, укажите имя клиента.")
+    await message.answer(
+        "👤 Пожалуйста, укажите имя клиента.\n\n"
+        "Чтобы отменить задачу — используйте: /cancel"
+    )
     await state.set_state(LinkStates.waiting_for_client_name)
-
 
 
 @links_to_presentations_router.message(LinkStates.waiting_for_client_name)
 async def handle_client_name(message: Message, state: FSMContext):
     """Обрабатываем имя клиента и запрашиваем ссылки."""
-    current_state = await state.get_state()
-    if current_state != LinkStates.waiting_for_client_name:
-        await message.answer("❌ Задача уже выполняется. Дождитесь завершения!")
-        return
     client_name = message.text.strip()
 
     if not client_name:
@@ -64,7 +66,8 @@ async def handle_client_name(message: Message, state: FSMContext):
 
     # Переходим к запросу ссылок
     await message.answer(
-        "🔗 Теперь отправьте список ссылок (каждая ссылка с новой строки)."
+        "🔗 Теперь отправьте список ссылок (каждая ссылка с новой строки).\n\n"
+        "Чтобы отменить задачу — используйте: /cancel"
     )
     await state.set_state(LinkStates.waiting_for_links)
 
@@ -72,7 +75,6 @@ async def handle_client_name(message: Message, state: FSMContext):
 @links_to_presentations_router.message(LinkStates.waiting_for_links)
 async def handle_links(message: Message, state: FSMContext):
     """Обработчик сообщений с ссылками в состоянии ожидания."""
-
     try:
         # Получаем ссылки из сообщения
         links = message.text.strip().splitlines()
@@ -103,9 +105,12 @@ async def handle_links(message: Message, state: FSMContext):
             return
 
         await message.answer(
-            f"Начинаю обработку ссылок для клиента: {client_name}"
+            f"Начинаю обработку ссылок для клиента: {client_name}\n\n"
+            f"⚠️ Пожалуйста, дождитесь завершения обработки — отмена на этом этапе невозможна."
         )
 
+        # Устанавливаем состояние обработки ссылок
+        await state.set_state(LinkStates.processing_links)
 
         # Обрабатываем ссылки
         output_status = await process_links_with_orchestrator(
@@ -122,20 +127,18 @@ async def handle_links(message: Message, state: FSMContext):
                 if os.path.isfile(file_path):
                     try:
                         document = FSInputFile(file_path)
-                        await message.answer_document(
-                            document
-                        )  # Отправляем документ
+                        await message.answer_document(document)  # Отправляем документ
                         logger.info(f"Файл отправлен: {file_name}")
                     except Exception as e:
-                        logger.error(
-                            f"Ошибка при отправке файла: {e}", exc_info=True
-                        )
+                        logger.error(f"Ошибка при отправке файла: {e}", exc_info=True)
                 else:
                     logger.warning(f"Объект {file_path} не является файлом.")
             await message.answer("Презентации отправлены!")
 
         else:
-            error_processing_message = r"Произошла ошибка при обработке ссылок на этапе парсинга и создания презентации, поэтому презентации не отправлены."
+            error_processing_message = (
+                "Произошла ошибка при обработке ссылок на этапе парсинга и создания презентации, поэтому презентации не отправлены."
+            )
             await message.answer(error_processing_message)
             logger.warning(error_processing_message)
 
@@ -145,4 +148,3 @@ async def handle_links(message: Message, state: FSMContext):
     finally:
         # Всегда сбрасываем состояние, даже если была ошибка
         await state.clear()
-
