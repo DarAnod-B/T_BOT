@@ -82,7 +82,7 @@ def get_processing_stages(
             "rewriter_image",
             {
                 "INPUT_PATH": "/app/data/table/data.csv",
-                "MAX_SYMBOL": "995",
+                "MAX_SYMBOL": "500",
                 "COLUMN_NAME": "Описание",
             },
             "✅ Переписывание завершено",
