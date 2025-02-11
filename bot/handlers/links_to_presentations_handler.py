@@ -7,7 +7,8 @@ import os
 import logging
 import re
 
-from bot.utils import process_links_with_orchestrator
+from bot.utils.presentation_handler import process_links_with_orchestrator
+
 
 logger = logging.getLogger(__name__)
 

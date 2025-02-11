@@ -2,13 +2,15 @@ import os
 import logging
 from typing import Callable, List, Tuple, Dict, Optional
 from aiogram.types import Message
-from .orchestrator import orchestrator  # Импортируем глобальный асинхронный оркестратор
+from bot.orchestrator import (
+    orchestrator,
+)  # Импортируем глобальный асинхронный оркестратор
 import aiofiles
 
 logger = logging.getLogger(__name__)
 
 # Глобальные пути
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
 STAGES_OF_PRESENTATION_CREATION = [1, 2, 3, 4]
 
 
@@ -16,7 +18,7 @@ async def save_links_to_file(links: List[str], filename: str = "links.txt") -> s
     """Асинхронно сохраняет список ссылок в файл."""
     links_path = os.path.join(DATA_DIR, "table", filename)
     os.makedirs(os.path.dirname(links_path), exist_ok=True)
-    
+
     # Используем асинхронную запись в файл
     try:
         async with aiofiles.open(links_path, "w") as file:
@@ -31,7 +33,7 @@ async def handle_error(
     e: Exception,
     message: Message,
     status_callback: Optional[Callable[[str], None]] = None,
-    specific_message: Optional[str] = None
+    specific_message: Optional[str] = None,
 ):
     """Асинхронная обработка ошибок с логированием и отправкой сообщения."""
     error_message = specific_message or f"❌ Ошибка при выполнении: {str(e)}"
@@ -49,7 +51,7 @@ async def handle_error(
 async def update_status(
     message: Message,
     log_message: str,
-    status_callback: Optional[Callable[[str], None]] = None
+    status_callback: Optional[Callable[[str], None]] = None,
 ):
     """Асинхронное обновление статуса."""
     try:
@@ -61,7 +63,9 @@ async def update_status(
         logger.error(f"Error updating status: {e}")
 
 
-def get_processing_stages(client_name: Optional[str] = None) -> List[Tuple[str, str, Dict[str, str], str]]:
+def get_processing_stages(
+    client_name: Optional[str] = None,
+) -> List[Tuple[str, str, Dict[str, str], str]]:
     """Генерация этапов обработки (синхронная функция, не требует изменений)."""
     return [
         (
@@ -89,7 +93,7 @@ def get_processing_stages(client_name: Optional[str] = None) -> List[Tuple[str, 
             {
                 "INPUT_PATH": "/app/data/table/data.csv",
                 "MASK_DIR_PATH": "/app/data/mask/",
-                "BASE_IMAGE_DIR_PATH":  "/app/data/presentation/pic/",
+                "BASE_IMAGE_DIR_PATH": "/app/data/presentation/pic/",
             },
             "✅ Обработка таблиц завершена",
         ),
@@ -121,28 +125,27 @@ def get_processing_stages(client_name: Optional[str] = None) -> List[Tuple[str, 
 async def process_stage(
     stage_info: Tuple[str, str, Dict[str, str], str],
     message: Message,
-    status_callback: Callable[[str], None]
+    status_callback: Callable[[str], None],
 ) -> Tuple[bool, str]:
     """Асинхронная обработка одного этапа."""
     start_message, image_name, environment, end_message = stage_info
-    
+
     try:
         await update_status(message, start_message, status_callback)
-        
+
         # Асинхронный запуск контейнера
         logs, exit_code = await orchestrator.run_container(
-            image_name,
-            environment=environment
+            image_name, environment=environment
         )
-        
+
         if exit_code != 0:
             error_msg = f"Этап завершился с ошибкой (код {exit_code})"
             await message.answer(f"```\n{logs[-4000:]}\n```", parse_mode="MarkdownV2")
             return False, logs
-        
+
         await update_status(message, end_message, status_callback)
         return True, logs
-    
+
     except Exception as e:
         logger.error(f"Stage error: {e}", exc_info=True)
         return False, str(e)
@@ -152,7 +155,7 @@ async def process_links_with_orchestrator(
     links: List[str],
     message: Message,
     client_name: Optional[str] = None,
-    status_callback: Optional[Callable[[str], None]] = None
+    status_callback: Optional[Callable[[str], None]] = None,
 ) -> bool:
     """Асинхронная обработка всех этапов."""
     try:
@@ -163,20 +166,24 @@ async def process_links_with_orchestrator(
         await update_status(message, "📝 Начало обработки ссылок...", status_callback)
 
         for stage_index, stage_info in enumerate(stages, start=1):
-            success, stage_logs = await process_stage(stage_info, message, status_callback)
+            success, stage_logs = await process_stage(
+                stage_info, message, status_callback
+            )
             logs.append(stage_logs)
-            
+
             if not success:
                 error_msg = f"Ошибка на этапе {stage_index}: {stage_info[0]}"
                 await handle_error(Exception(error_msg), message, status_callback)
-                
+
                 if stage_index not in STAGES_OF_PRESENTATION_CREATION:
                     return True
                 return False
 
-        await update_status(message, "🎉 Все процессы успешно завершены!", status_callback)
+        await update_status(
+            message, "🎉 Все процессы успешно завершены!", status_callback
+        )
         return True
-    
+
     except Exception as e:
         await handle_error(e, message, status_callback)
         return False

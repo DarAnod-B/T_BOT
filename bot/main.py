@@ -8,28 +8,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.config.config import BOT_TOKEN
 from bot.handlers import router
 from bot.orchestrator import orchestrator
+from bot.logger import setup_logger 
 
-# Настройка логирования
-LOG_FILENAME = f"logs/bot_{datetime.now().strftime('%Y%m%d_%H-%M-%S')}.log"
 
-# Заменяем basicConfig на явную настройку корневого логгера
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
+# Настраиваем логгер
+logger = setup_logger()
 
-formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s %(message)s")
-
-file_handler = logging.FileHandler(LOG_FILENAME, encoding="utf-8")
-file_handler.setFormatter(formatter)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-
-# Убедитесь, что обработчики не дублируются
-if not root_logger.hasHandlers():
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(stream_handler)
-
-logger = logging.getLogger(__name__)
 
 BOT_COMMANDS = [
     BotCommand(command="/start", description="Начать работу с ботом"),
