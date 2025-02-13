@@ -1,5 +1,7 @@
 __pycache__
-config
+config/*
+!config/config_example.py/
+
 logs
 venv
 data

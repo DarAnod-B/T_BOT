@@ -135,7 +135,7 @@ async def process_stage(
 
         # Асинхронный запуск контейнера
         logs, exit_code = await orchestrator.run_container(
-            image_name, environment=environment
+            image_name, environment=environment,  ports={9222: 9223}
         )
 
         if exit_code != 0:
